@@ -1,1 +1,511 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>IHSS - Encuesta de Servicio</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
+    <style>
+        body { font-family: 'Verdana', sans-serif; background-color: #f0f9ff; color: #1e293b; }
+        .hidden-view { display: none !important; }
+        
+        /* UI Paciente */
+        .option-card { cursor: pointer; transition: all 0.2s; border: 2px solid #e2e8f0; background: white; }
+        .option-card:hover { border-color: #3b82f6; transform: translateY(-2px); }
+        input:checked + .option-card { background-color: #eff6ff; border-color: #2563eb; }
+        input:checked + .option-card .icon-box { background-color: #2563eb; color: white; border-color: #2563eb; }
+        
+        .rating-star { font-size: 2.5rem; color: #cbd5e1; cursor: pointer; transition: transform 0.1s; }
+        .rating-star.active { color: #fbbf24; }
+        .rating-star:active { transform: scale(1.2); }
+
+        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #2563eb; border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* UI Admin Editor */
+        .editor-item { border-left: 4px solid #cbd5e1; padding-left: 1rem; transition: border-color 0.2s; }
+        .editor-item:focus-within { border-color: #3b82f6; }
+    </style>
+</head>
+<body class="pb-20">
+
+    <!-- Navbar -->
+    <nav class="bg-white border-b sticky top-0 z-50 shadow-sm px-4 py-3 flex justify-between items-center">
+        <div class="flex items-center gap-2">
+            <div class="bg-blue-600 text-white p-2 rounded"><i class="fas fa-hospital-symbol"></i></div>
+            <div>
+                <h1 class="font-bold text-slate-800 text-sm md:text-base">IHSS Encuesta</h1>
+                <p class="text-xs text-slate-500" id="navSubtitle">Cargando...</p>
+            </div>
+        </div>
+        <div id="adminControls" class="hidden-view flex gap-2">
+            <button onclick="changeRoute('dashboard')" class="text-xs bg-slate-100 px-3 py-2 rounded font-bold hover:bg-slate-200">DASHBOARD</button>
+            <button onclick="changeRoute('editor')" class="text-xs bg-blue-100 text-blue-700 px-3 py-2 rounded font-bold hover:bg-blue-200">EDITOR</button>
+            <button onclick="logout()" class="text-xs bg-red-100 text-red-700 px-3 py-2 rounded font-bold">SALIR</button>
+        </div>
+    </nav>
+
+    <!-- LOADING SCREEN -->
+    <div id="globalLoader" class="fixed inset-0 bg-white z-[60] flex flex-col items-center justify-center">
+        <div class="loader w-10 h-10 mb-4"></div>
+        <p class="text-slate-500 font-bold">Cargando Encuesta...</p>
+    </div>
+
+    <!-- ================= VISTA PACIENTE (/pacientes) ================= -->
+    <div id="view-patient" class="hidden-view">
+        <div class="bg-blue-600 text-white pt-8 pb-16 px-6 text-center rounded-b-[2rem] shadow-lg mb-6">
+            <h2 class="text-2xl font-bold mb-1" id="formTitle">Encuesta</h2>
+            <p class="text-blue-100" id="formDesc">Cargando descripción...</p>
+        </div>
+
+        <form id="surveyForm" class="max-w-3xl mx-auto px-4 -mt-10 space-y-6">
+            <!-- AQUÍ SE INYECTAN LAS PREGUNTAS DINÁMICAMENTE -->
+            <div id="dynamicContainer" class="space-y-6"></div>
+
+            <button type="submit" id="btnSubmit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-xl flex justify-center items-center gap-2 text-lg">
+                <span>ENVIAR RESPUESTAS</span>
+                <div id="spinner" class="loader hidden"></div>
+            </button>
+            <p class="text-center text-slate-400 text-xs mt-4">IHSS San Pedro Sula © 2024</p>
+        </form>
+    </div>
+
+    <!-- ================= VISTA ADMIN: EDITOR ================= -->
+    <div id="view-editor" class="hidden-view p-4 bg-slate-50 min-h-screen">
+        <div class="max-w-4xl mx-auto">
+            <div class="bg-white p-6 rounded-xl shadow mb-6 border-l-4 border-blue-500">
+                <h2 class="text-xl font-bold mb-4">Configuración de la Encuesta</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <input type="text" id="editTitle" placeholder="Título de la Encuesta" class="w-full border p-2 rounded">
+                    <input type="text" id="editDesc" placeholder="Subtítulo / Descripción" class="w-full border p-2 rounded">
+                </div>
+                <button onclick="addNewQuestion()" class="bg-green-100 text-green-700 px-4 py-2 rounded font-bold hover:bg-green-200 text-sm">
+                    <i class="fas fa-plus mr-1"></i> Agregar Pregunta
+                </button>
+            </div>
+
+            <!-- Lista de Preguntas Editables -->
+            <div id="editorList" class="space-y-4"></div>
+
+            <!-- Botones de Acción -->
+            <div class="sticky bottom-4 bg-white p-4 rounded-xl shadow-2xl border border-slate-200 mt-6 flex justify-between items-center z-40">
+                <p class="text-xs text-slate-500 font-bold uppercase">Cambios sin guardar</p>
+                <button onclick="saveConfiguration()" id="btnSaveConfig" class="bg-blue-800 text-white px-6 py-3 rounded-lg font-bold hover:bg-blue-900 shadow-lg">
+                    GUARDAR CAMBIOS
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= VISTA ADMIN: LOGIN (/admin) ================= -->
+    <div id="view-login" class="hidden-view min-h-screen flex items-center justify-center p-4 bg-slate-100">
+        <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-sm text-center">
+            <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-500 text-2xl">
+                <i class="fas fa-user-shield"></i>
+            </div>
+            <h2 class="font-bold text-slate-800 text-2xl mb-2">Acceso Admin</h2>
+            <p class="text-sm text-slate-400 mb-6">Panel de Control</p>
+            
+            <input type="text" id="adminUser" placeholder="Usuario" class="w-full p-3 border rounded mb-3 text-center bg-slate-50">
+            <input type="password" id="adminPass" placeholder="Contraseña" class="w-full p-3 border rounded mb-4 text-center bg-slate-50">
+            
+            <button onclick="attemptLogin()" class="w-full bg-slate-800 text-white font-bold py-3 rounded hover:bg-slate-900 transition">Ingresar</button>
+            <p id="loginError" class="text-red-500 text-sm hidden mt-3 font-bold">Credenciales incorrectas</p>
+            <button onclick="changeRoute('pacientes')" class="mt-6 text-sm text-slate-400 underline">Volver a Encuesta</button>
+        </div>
+    </div>
+
+    <!-- ================= VISTA DASHBOARD (BÁSICA) ================= -->
+    <div id="view-dashboard" class="hidden-view p-4 min-h-screen bg-slate-50">
+        <div class="max-w-5xl mx-auto">
+            <div class="bg-slate-800 text-white p-6 rounded-xl mb-6 flex justify-between items-center">
+                <div>
+                    <h2 class="font-bold text-xl">Resultados</h2>
+                    <p class="text-sm text-slate-400">Datos en tiempo real</p>
+                </div>
+                <div class="text-right">
+                     <p class="text-2xl font-bold" id="dashTotal">0</p>
+                     <p class="text-xs uppercase">Respuestas</p>
+                </div>
+            </div>
+            
+            <!-- Link Generator -->
+            <div class="bg-white p-4 rounded-xl shadow mb-6 border border-slate-200">
+                <p class="text-xs font-bold text-slate-500 uppercase mb-2">Enlace para Pacientes</p>
+                <div class="flex bg-slate-100 rounded p-1">
+                    <input type="text" id="publicLink" readonly class="bg-transparent w-full text-sm px-2 outline-none text-slate-600">
+                    <button onclick="copyLink()" class="bg-blue-600 text-white px-3 py-1 rounded text-xs font-bold">COPIAR</button>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl shadow overflow-hidden">
+                 <div class="overflow-x-auto">
+                    <table class="w-full text-sm text-left">
+                        <thead class="bg-slate-100 text-slate-600 font-bold">
+                            <tr id="dashHeaders"></tr>
+                        </thead>
+                        <tbody id="dashBody" class="divide-y divide-slate-100"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SCRIPTS -->
+    <script>
+        // CONFIGURACIÓN INICIAL
+        const SCRIPT_URL = 'PEGAR_TU_URL_DE_APPS_SCRIPT_AQUI'; // <--- IMPORTANTE: PEGA TU URL DE APPS SCRIPT
+        const CREDENTIALS = { user: 'admin', pass: 'admin' };
+        
+        // --- PREGUNTAS COMPLETAS (POR DEFECTO) ---
+        // Se usarán si la hoja 'Configuracion' está vacía o falla.
+        let surveyConfig = {
+            title: "Encuesta de Satisfacción",
+            subtitle: "Servicio de Entrega de Medicamentos a Domicilio - IHSS",
+            questions: [
+                // Sección 1: Datos
+                { id: "genero", type: "radio", label: "Género del Beneficiario", options: "Femenino,Masculino,Prefiero no responder", icon: "fas fa-venus-mars" },
+                { id: "edad", type: "select", label: "Rango de Edad", options: "Menos de 60 años,60 a 69 años,70 a 79 años,80 años o más", icon: "fas fa-calendar-alt" },
+                { id: "relacion", type: "select", label: "Relación con el beneficiario", options: "Derechohabiente,Hijo/a,Familiar cercano,Cuidador/a", icon: "fas fa-users" },
+                { id: "es_derechohabiente", type: "yesno", label: "¿Usted es derechohabiente del IHSS?", options: "Si,No", icon: "fas fa-id-card" },
+                { id: "residencia", type: "yesno", label: "¿Reside en San Pedro Sula?", options: "Si,No", icon: "fas fa-map-marker-alt" },
+                
+                // Sección 2: Conocimiento
+                { id: "conoce", type: "select", label: "¿Conoce el servicio de entrega?", options: "Sí lo conozco,He escuchado de él,No lo conocía", icon: "fas fa-info-circle" },
+                { id: "claridad", type: "select", label: "¿Qué tan claro es el programa?", options: "Muy claro,Algo claro,Poco claro,Nada claro", icon: "fas fa-glasses" },
+                { id: "medio", type: "select", label: "Medio de información", options: "Atención presencial,Llamadas,Redes sociales,Web IHSS,Recomendación,Ninguno", icon: "fas fa-bullhorn" },
+                { id: "canal_pref", type: "select", label: "Canal preferido para informarse", options: "Presenciales,Digitales,Ambos", icon: "fas fa-mobile-alt" },
+
+                // Sección 3: Uso (Trigger)
+                { id: "uso", type: "yesno", label: "¿Ha utilizado el servicio de entrega?", options: "Si,No", icon: "fas fa-shipping-fast" },
+
+                // Rama NO
+                { id: "razon_no", type: "radio", label: "¿Por qué no lo ha usado?", options: "No conoce proceso,Desconfianza,Prefiere ir personal,Otro", icon: "fas fa-question", parent: "uso", parentVal: "No" },
+
+                // Rama SI (Calificaciones)
+                { id: "calif_puntualidad", type: "stars", label: "Puntualidad en la entrega", parent: "uso", parentVal: "Si" },
+                { id: "calif_estado", type: "stars", label: "Estado de medicamentos", parent: "uso", parentVal: "Si" },
+                { id: "calif_info", type: "stars", label: "Claridad de información", parent: "uso", parentVal: "Si" },
+                { id: "calif_confianza", type: "stars", label: "Confianza en el servicio", parent: "uso", parentVal: "Si" },
+
+                // Sección 4: Mejoras
+                { id: "prioridad", type: "select", label: "Aspecto prioritario a mejorar", options: "Comunicación,Acceso información,Seguimiento,Cobertura", icon: "fas fa-chart-line" },
+                { id: "mejora_com", type: "yesno", label: "¿Mejor comunicación aumentaría uso?", options: "Si,No", icon: "fas fa-comments" },
+                { id: "sugerencia", type: "text", label: "Sugerencias para el IHSS", icon: "fas fa-pen" }
+            ]
+        };
+        let surveyData = [];
+
+        // ================= CICLO DE VIDA & ROUTING =================
+        window.onload = function() {
+            handleRouting(); // Ejecutar al cargar
+            window.addEventListener('hashchange', handleRouting); // Ejecutar al cambiar hash
+            
+            // Cargar datos (siempre útil tener config fresca)
+            loadApp();
+        };
+
+        function handleRouting() {
+            // Obtener hash (ej: #/admin)
+            const hash = window.location.hash;
+            
+            if (hash.includes('/admin')) {
+                showView('login');
+                document.getElementById('globalLoader').classList.add('hidden-view');
+            } else if (hash.includes('/dashboard') || hash.includes('/editor')) {
+                // Proteger rutas internas
+                // Si no hay sesión (simulado), mandar a login
+                // Aquí simplificamos: si intentan entrar directo, mostramos login
+                showView('login'); 
+                document.getElementById('globalLoader').classList.add('hidden-view');
+            } else {
+                // Por defecto o #/pacientes
+                showView('patient');
+            }
+        }
+
+        function changeRoute(route) {
+            // Función helper para cambiar URL y disparar evento
+            if(route === 'pacientes') window.location.hash = '/pacientes';
+            else if(route === 'admin' || route === 'login') window.location.hash = '/admin';
+            else {
+                // Rutas internas del panel admin (no cambian hash para no exponerlas fácil)
+                showView(route);
+            }
+        }
+
+        function loadApp() {
+            document.getElementById('globalLoader').classList.remove('hidden-view');
+            fetch(SCRIPT_URL)
+                .then(r => r.json())
+                .then(json => {
+                    if(json.result === 'success') {
+                        if(json.config && json.config.questions) {
+                            surveyConfig = json.config;
+                        }
+                        surveyData = json.data;
+                        renderPatientView();
+                        
+                        // Si estábamos cargando y ya terminamos, ocultar loader si es vista paciente
+                        if(!window.location.hash.includes('admin')) {
+                            document.getElementById('globalLoader').classList.add('hidden-view');
+                        }
+                    }
+                })
+                .catch(e => {
+                    console.log("Modo offline o error config");
+                    renderPatientView();
+                    if(!window.location.hash.includes('admin')) {
+                        document.getElementById('globalLoader').classList.add('hidden-view');
+                    }
+                });
+        }
+
+        function showView(id) {
+            ['patient', 'login', 'editor', 'dashboard'].forEach(v => document.getElementById('view-'+v).classList.add('hidden-view'));
+            document.getElementById('view-'+id).classList.remove('hidden-view');
+            
+            // Navbar logic
+            if(id === 'patient' || id === 'login') document.getElementById('adminControls').classList.add('hidden-view');
+            else document.getElementById('adminControls').classList.remove('hidden-view');
+
+            if(id === 'editor') renderEditor();
+            if(id === 'dashboard') renderDashboard();
+        }
+
+        // ================= RENDERIZADOR PACIENTE =================
+        function renderPatientView() {
+            document.getElementById('formTitle').textContent = surveyConfig.title;
+            document.getElementById('formDesc').textContent = surveyConfig.subtitle;
+            document.getElementById('navSubtitle').textContent = surveyConfig.title;
+
+            const container = document.getElementById('dynamicContainer');
+            container.innerHTML = '';
+
+            surveyConfig.questions.forEach(q => {
+                const wrapper = document.createElement('div');
+                wrapper.className = `bg-white p-6 rounded-2xl shadow-sm border border-slate-100 q-wrapper fade-in`;
+                wrapper.dataset.id = q.id;
+                
+                // Lógica condicional inicial
+                if(q.parent) wrapper.style.display = 'none';
+
+                // Header
+                const header = document.createElement('div');
+                header.className = "flex items-center gap-3 mb-4";
+                header.innerHTML = `
+                    <div class="bg-blue-100 text-blue-700 w-10 h-10 rounded-full flex items-center justify-center text-lg"><i class="${q.icon || 'fas fa-question'}"></i></div>
+                    <h3 class="font-bold text-slate-700 text-lg">${q.label}</h3>
+                `;
+                wrapper.appendChild(header);
+
+                // Inputs
+                let inputHtml = '';
+                const opts = q.options ? q.options.split(',') : [];
+
+                if(q.type === 'radio' || q.type === 'yesno') {
+                    inputHtml = `<div class="grid grid-cols-${opts.length > 2 ? '1' : '2'} gap-4">`;
+                    opts.forEach(opt => {
+                        inputHtml += `
+                            <label class="relative cursor-pointer">
+                                <input type="radio" name="${q.id}" value="${opt.trim()}" class="peer hidden" onchange="checkConditions()">
+                                <div class="option-card p-4 rounded-xl flex items-center justify-center gap-2 h-full text-center">
+                                    <div class="icon-box w-8 h-8 rounded-full border border-slate-200 flex items-center justify-center text-slate-400"><i class="fas fa-check"></i></div>
+                                    <span class="font-bold text-slate-600">${opt.trim()}</span>
+                                </div>
+                            </label>`;
+                    });
+                    inputHtml += `</div>`;
+                } 
+                else if (q.type === 'select') {
+                    inputHtml = `<select name="${q.id}" class="w-full p-4 bg-slate-50 border rounded-xl text-lg outline-none focus:border-blue-500">
+                        <option value="">Seleccione...</option>
+                        ${opts.map(o => `<option value="${o.trim()}">${o.trim()}</option>`).join('')}
+                    </select>`;
+                }
+                else if (q.type === 'text') {
+                    inputHtml = `<textarea name="${q.id}" rows="3" class="w-full p-4 bg-slate-50 border rounded-xl outline-none focus:border-blue-500" placeholder="Escriba aquí..."></textarea>`;
+                }
+                else if (q.type === 'stars') {
+                    inputHtml = `<div class="flex justify-center gap-2 star-container" data-name="${q.id}">
+                        ${[1,2,3,4,5].map(i => `<i class="fas fa-star rating-star" onclick="rate('${q.id}', ${i}, this)"></i>`).join('')}
+                    </div><input type="hidden" name="${q.id}" id="input-${q.id}">`;
+                }
+
+                const body = document.createElement('div');
+                body.innerHTML = inputHtml;
+                wrapper.appendChild(body);
+                container.appendChild(wrapper);
+            });
+        }
+
+        // Check condiciones
+        function checkConditions() {
+            const formData = new FormData(document.getElementById('surveyForm'));
+            
+            surveyConfig.questions.forEach(q => {
+                if(q.parent) {
+                    const parentVal = formData.get(q.parent);
+                    const wrapper = document.querySelector(`.q-wrapper[data-id="${q.id}"]`);
+                    if(wrapper) {
+                        if(parentVal === q.parentVal) {
+                            wrapper.style.display = 'block';
+                            // Scroll suave hacia el elemento mostrado
+                            // wrapper.scrollIntoView({behavior: "smooth", block: "center"}); 
+                        } else {
+                            wrapper.style.display = 'none';
+                        }
+                    }
+                }
+            });
+        }
+
+        function rate(id, val, el) {
+            document.getElementById('input-'+id).value = val;
+            const container = el.parentElement;
+            const stars = container.querySelectorAll('.rating-star');
+            stars.forEach((s, i) => {
+                if(i < val) s.classList.add('active');
+                else s.classList.remove('active');
+            });
+        }
+
+        // Enviar
+        document.getElementById('surveyForm').addEventListener('submit', e => {
+            e.preventDefault();
+            const btn = document.getElementById('btnSubmit');
+            const spinner = document.getElementById('spinner');
+            
+            btn.disabled = true;
+            spinner.classList.remove('hidden');
+
+            const formData = new FormData(e.target);
+            formData.append('action', 'save_response'); 
+
+            fetch(SCRIPT_URL, { method: 'POST', body: formData })
+                .then(r => r.json())
+                .then(json => {
+                    alert("¡Gracias! Respuestas enviadas correctamente.");
+                    window.location.reload();
+                })
+                .catch(e => {
+                    alert("Error de conexión, intente nuevamente.");
+                    btn.disabled = false;
+                    spinner.classList.add('hidden');
+                });
+        });
+
+        // ================= EDITOR ADMIN =================
+        function renderEditor() {
+            document.getElementById('editTitle').value = surveyConfig.title;
+            document.getElementById('editDesc').value = surveyConfig.subtitle;
+            
+            const list = document.getElementById('editorList');
+            list.innerHTML = '';
+
+            surveyConfig.questions.forEach((q, idx) => {
+                const item = document.createElement('div');
+                item.className = "bg-white p-4 rounded-lg shadow-sm border border-slate-200 editor-item";
+                item.innerHTML = `
+                    <div class="flex justify-between mb-2">
+                        <span class="font-bold text-slate-400 text-xs">PREGUNTA ${idx + 1} (ID: ${q.id})</span>
+                        <button onclick="deleteQuestion(${idx})" class="text-red-400 hover:text-red-600"><i class="fas fa-trash"></i></button>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-2 mb-2">
+                        <input type="text" class="border p-2 rounded text-sm w-full" value="${q.label}" onchange="updateQ(${idx}, 'label', this.value)" placeholder="Pregunta">
+                        <select class="border p-2 rounded text-sm w-full" onchange="updateQ(${idx}, 'type', this.value)">
+                            <option value="radio" ${q.type==='radio'?'selected':''}>Opción Múltiple (Tarjetas)</option>
+                            <option value="select" ${q.type==='select'?'selected':''}>Lista Desplegable</option>
+                            <option value="yesno" ${q.type==='yesno'?'selected':''}>Sí / No (Grande)</option>
+                            <option value="text" ${q.type==='text'?'selected':''}>Texto Abierto</option>
+                            <option value="stars" ${q.type==='stars'?'selected':''}>Estrellas</option>
+                        </select>
+                    </div>
+                    <div class="grid grid-cols-3 gap-2">
+                        <input type="text" class="border p-2 rounded text-sm col-span-2" value="${q.options || ''}" onchange="updateQ(${idx}, 'options', this.value)" placeholder="Opciones (coma)">
+                        <input type="text" class="border p-2 rounded text-sm" value="${q.icon || ''}" onchange="updateQ(${idx}, 'icon', this.value)" placeholder="Icono (fas fa-...)">
+                    </div>
+                `;
+                list.appendChild(item);
+            });
+        }
+
+        function updateQ(idx, field, val) { surveyConfig.questions[idx][field] = val; }
+        function deleteQuestion(idx) { 
+            if(confirm('¿Borrar?')) { surveyConfig.questions.splice(idx, 1); renderEditor(); } 
+        }
+        function addNewQuestion() {
+            const id = 'p' + (new Date().getTime());
+            surveyConfig.questions.push({ id: id, type: 'text', label: 'Nueva Pregunta', options: '', icon: 'fas fa-question' });
+            renderEditor();
+        }
+
+        function saveConfiguration() {
+            const btn = document.getElementById('btnSaveConfig');
+            btn.textContent = "Guardando..."; btn.disabled = true;
+
+            surveyConfig.title = document.getElementById('editTitle').value;
+            surveyConfig.subtitle = document.getElementById('editDesc').value;
+
+            const formData = new FormData();
+            formData.append('action', 'save_config');
+            formData.append('configData', JSON.stringify(surveyConfig));
+
+            fetch(SCRIPT_URL, { method: 'POST', body: formData })
+                .then(r => r.json())
+                .then(json => {
+                    alert("Configuración actualizada.");
+                    renderPatientView();
+                })
+                .finally(() => { btn.textContent = "GUARDAR CAMBIOS"; btn.disabled = false; });
+        }
+
+        // ================= DASHBOARD & AUTH =================
+        function renderDashboard() {
+            document.getElementById('dashTotal').textContent = surveyData.length;
+            const baseUrl = 'https://jose50440.github.io/formulario/#/pacientes';
+            document.getElementById('publicLink').value = baseUrl;
+            
+            const thead = document.getElementById('dashHeaders');
+            thead.innerHTML = '<th class="p-4">Fecha</th>';
+            surveyConfig.questions.forEach(q => thead.innerHTML += `<th class="p-4 whitespace-nowrap">${q.label}</th>`);
+
+            const tbody = document.getElementById('dashBody');
+            tbody.innerHTML = '';
+            surveyData.slice().reverse().slice(0, 20).forEach(row => {
+                let tr = `<tr class="hover:bg-slate-50 border-b border-slate-100">`;
+                const date = row.fecha ? new Date(row.fecha).toLocaleDateString() : '-';
+                tr += `<td class="p-4 text-slate-500">${date}</td>`;
+                surveyConfig.questions.forEach(q => tr += `<td class="p-4">${row[q.id] || '-'}</td>`);
+                tr += `</tr>`;
+                tbody.innerHTML += tr;
+            });
+        }
+
+        function attemptLogin() {
+            const u = document.getElementById('adminUser').value;
+            const p = document.getElementById('adminPass').value;
+            
+            if(u === CREDENTIALS.user && p === CREDENTIALS.pass) {
+                showView('dashboard');
+                document.getElementById('globalLoader').classList.add('hidden-view'); // Asegurar
+            } else {
+                document.getElementById('loginError').classList.remove('hidden');
+            }
+        }
+
+        function logout() { 
+            window.location.hash = '/pacientes'; // Sacar del admin
+            window.location.reload(); 
+        }
+
+        function copyLink() {
+            const t = document.getElementById("publicLink");
+            t.select(); document.execCommand("copy"); alert("Enlace copiado");
+        }
+    </script>
+</body>
+</html>
