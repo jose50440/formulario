@@ -137,7 +137,8 @@
             <img src="./gifdashboard.gif" alt="Personaje del proyecto" class="h-20 md:h-24 object-contain rounded-xl" onerror="this.style.display='none'">
         </div>
 
-        <form id="surveyForm" class="max-w-3xl mx-auto px-4 -mt-2 space-y-6">
+        <form id="surveyForm" class="max-w-3xl mx-auto px-4 -mt-2 space-y-6" method="post" action="" target="submitFrame">
+            <input type="hidden" name="action" value="save_response">
             <div id="dynamicContainer" class="space-y-6"></div>
 
             <button type="submit" id="btnSubmit" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-5 rounded-2xl shadow-xl flex justify-center items-center gap-2 text-xl transition">
@@ -146,6 +147,7 @@
             </button>
             <p class="text-center text-teal-600 text-sm mt-4">IHSS San Pedro Sula ©</p>
         </form>
+        <iframe name="submitFrame" id="submitFrame" title="Envío" class="hidden w-0 h-0 border-0"></iframe>
     </div>
 
     <!-- ================= VISTA ADMIN: EDITOR ================= -->
@@ -268,20 +270,21 @@
         }
 
         function loadApp() {
-            document.getElementById('globalLoader').classList.remove('hidden-view');
+            var isAdmin = window.location.hash.includes('admin');
+            if (!isAdmin) document.getElementById('globalLoader').classList.remove('hidden-view');
             fetch(SCRIPT_URL)
                 .then(r => r.json())
                 .then(json => {
                     if (json.result === 'success') {
                         if (json.config && json.config.questions) surveyConfig = json.config;
-                        surveyData = json.data;
+                        surveyData = json.data || [];
                         renderPatientView();
-                        if (!window.location.hash.includes('admin')) document.getElementById('globalLoader').classList.add('hidden-view');
                     }
+                    document.getElementById('globalLoader').classList.add('hidden-view');
                 })
                 .catch(e => {
                     renderPatientView();
-                    if (!window.location.hash.includes('admin')) document.getElementById('globalLoader').classList.add('hidden-view');
+                    document.getElementById('globalLoader').classList.add('hidden-view');
                 });
         }
 
@@ -382,25 +385,35 @@
             });
         }
 
-        document.getElementById('surveyForm').addEventListener('submit', e => {
+        document.getElementById('surveyForm').addEventListener('submit', function(e) {
             e.preventDefault();
+            const form = this;
             const btn = document.getElementById('btnSubmit');
             const spinner = document.getElementById('spinner');
+            const iframe = document.getElementById('submitFrame');
             btn.disabled = true;
             spinner.classList.remove('hidden');
-            const formData = new FormData(e.target);
-            formData.append('action', 'save_response');
-            fetch(SCRIPT_URL, { method: 'POST', body: formData })
-                .then(r => r.json())
-                .then(json => {
+            form.action = SCRIPT_URL;
+            form.method = 'post';
+            form.target = 'submitFrame';
+            var responded = false;
+            var submitted = false;
+            function onDone(success) {
+                if (responded) return;
+                responded = true;
+                btn.disabled = false;
+                spinner.classList.add('hidden');
+                if (success) {
                     alert("¡Gracias! Sus respuestas se han enviado correctamente.");
                     window.location.reload();
-                })
-                .catch(e => {
+                } else {
                     alert("Error de conexión. Por favor intente nuevamente.");
-                    btn.disabled = false;
-                    spinner.classList.add('hidden');
-                });
+                }
+            }
+            iframe.onload = function() { if (submitted) onDone(true); };
+            setTimeout(function() { onDone(false); }, 12000);
+            form.submit();
+            submitted = true;
         });
 
         function renderEditor() {
