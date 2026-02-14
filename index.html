@@ -97,14 +97,14 @@
 </head>
 <body class="pb-24 min-h-screen">
 
-    <!-- Navbar -->
-    <nav class="bg-white border-b border-teal-100 sticky top-0 z-50 shadow-sm px-4 py-3 flex justify-between items-center">
-        <div class="flex items-center gap-3">
-            <img src="./logoihssatucasa.png" alt="IHSS en tu casa" class="h-10 object-contain" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
-            <div class="w-10 h-10 rounded-lg bg-teal-100 flex items-center justify-center text-teal-700 hidden" style="display:none;"><i class="fas fa-home"></i></div>
-            <img src="./ihsslogonuevo.png" alt="IHSS" class="h-9 object-contain" onerror="this.style.display='none'">
-            <div>
-                <h1 class="font-bold text-teal-800 text-base md:text-lg">Encuesta IHSS</h1>
+    <!-- Navbar: logos grandes y bien visibles -->
+    <nav class="bg-white border-b border-teal-100 sticky top-0 z-50 shadow-sm px-4 py-2 flex justify-between items-center">
+        <div class="flex items-center gap-4 min-h-[4.5rem]">
+            <img src="./logoihssatucasa.png" alt="IHSS en tu casa" class="h-14 md:h-16 w-auto object-contain flex-shrink-0" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+            <div class="w-14 h-14 rounded-xl bg-teal-100 flex items-center justify-center text-teal-700 hidden flex-shrink-0" style="display:none;"><i class="fas fa-home text-2xl"></i></div>
+            <img src="./ihsslogonuevo.png" alt="IHSS" class="h-12 md:h-14 w-auto object-contain flex-shrink-0" onerror="this.style.display='none'">
+            <div class="min-w-0">
+                <h1 class="font-bold text-teal-800 text-base md:text-lg truncate">Encuesta IHSS</h1>
                 <p class="text-xs text-teal-600" id="navSubtitle">Entrega a domicilio · San Pedro Sula</p>
             </div>
         </div>
@@ -123,10 +123,10 @@
 
     <!-- ================= VISTA PACIENTE ================= -->
     <div id="view-patient" class="hidden-view">
-        <div class="bg-gradient-to-br from-teal-600 to-cyan-600 text-white pt-6 pb-12 px-6 text-center rounded-b-[2rem] shadow-xl mb-4">
-            <div class="flex justify-center gap-4 items-center mb-3">
-                <img src="./logoihssatucasa.png" alt="IHSS en tu casa" class="h-14 object-contain" onerror="this.style.display='none'">
-                <img src="./ihsslogonuevo.png" alt="IHSS" class="h-12 object-contain" onerror="this.style.display='none'">
+        <div class="bg-gradient-to-br from-teal-600 to-cyan-600 text-white pt-8 pb-14 px-6 text-center rounded-b-[2rem] shadow-xl mb-4">
+            <div class="flex flex-wrap justify-center items-center gap-6 md:gap-10 mb-5">
+                <img src="./logoihssatucasa.png" alt="IHSS en tu casa" class="h-24 md:h-32 w-auto max-w-[180px] md:max-w-[220px] object-contain drop-shadow-lg" onerror="this.style.display='none'">
+                <img src="./ihsslogonuevo.png" alt="IHSS - Logo oficial" class="h-20 md:h-28 w-auto max-w-[140px] md:max-w-[180px] object-contain drop-shadow-lg" onerror="this.style.display='none'">
             </div>
             <h2 class="text-2xl md:text-3xl font-bold mb-1" id="formTitle">Encuesta sobre el servicio de entrega de medicamentos a domicilio</h2>
             <p class="text-teal-100 text-base" id="formDesc">IHSS – San Pedro Sula</p>
@@ -213,7 +213,7 @@
     </div>
 
     <script>
-        const SCRIPT_URL = 'PEGAR_TU_URL_DE_APPS_SCRIPT_AQUI';
+        const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxwB5kdMh9lHNGXKhFAjlUQDgwqVE-6aMBLYLbQv6i5N5y7bC5SajqSjHPzt8UJUqbZ8a/exec';
         const CREDENTIALS = { user: 'admin', pass: 'admin' };
 
         let surveyConfig = {
