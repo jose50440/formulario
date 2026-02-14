@@ -137,8 +137,7 @@
             <img src="./gifdashboard.gif" alt="Personaje del proyecto" class="h-20 md:h-24 object-contain rounded-xl" onerror="this.style.display='none'">
         </div>
 
-        <form id="surveyForm" class="max-w-3xl mx-auto px-4 -mt-2 space-y-6" method="post" action="" target="submitFrame">
-            <input type="hidden" name="action" value="save_response">
+        <form id="surveyForm" class="max-w-3xl mx-auto px-4 -mt-2 space-y-6">
             <div id="dynamicContainer" class="space-y-6"></div>
 
             <button type="submit" id="btnSubmit" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-5 rounded-2xl shadow-xl flex justify-center items-center gap-2 text-xl transition">
@@ -147,7 +146,6 @@
             </button>
             <p class="text-center text-teal-600 text-sm mt-4">IHSS San Pedro Sula ©</p>
         </form>
-        <iframe name="submitFrame" id="submitFrame" title="Envío" class="hidden w-0 h-0 border-0"></iframe>
     </div>
 
     <!-- ================= VISTA ADMIN: EDITOR ================= -->
@@ -198,9 +196,14 @@
             </div>
             <div class="bg-white p-4 rounded-xl shadow mb-6 border border-teal-200">
                 <p class="text-xs font-bold text-teal-600 uppercase mb-2">Enlace para Pacientes</p>
-                <div class="flex bg-teal-50 rounded-lg p-1">
-                    <input type="text" id="publicLink" readonly class="bg-transparent w-full text-sm px-2 outline-none text-teal-700">
-                    <button onclick="copyLink()" class="bg-teal-600 text-white px-3 py-1 rounded text-xs font-bold">COPIAR</button>
+                <div class="flex flex-wrap gap-2 items-center">
+                    <div class="flex bg-teal-50 rounded-lg p-1 flex-1 min-w-0">
+                        <input type="text" id="publicLink" readonly class="bg-transparent w-full text-sm px-2 outline-none text-teal-700">
+                        <button onclick="copyLink()" class="bg-teal-600 text-white px-3 py-1 rounded text-xs font-bold">COPIAR</button>
+                    </div>
+                    <button type="button" onclick="downloadExcel()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2">
+                        <i class="fas fa-file-excel"></i> Descargar Excel
+                    </button>
                 </div>
             </div>
             <div class="bg-white rounded-xl shadow overflow-hidden">
@@ -214,9 +217,25 @@
         </div>
     </div>
 
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
     <script>
-        const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxwB5kdMh9lHNGXKhFAjlUQDgwqVE-6aMBLYLbQv6i5N5y7bC5SajqSjHPzt8UJUqbZ8a/exec';
+        const FIREBASE_CONFIG = {
+            apiKey: "AIzaSyARj9M9llgMyYCu7nc2UxL2Z5N5fW5ttcY",
+            authDomain: "formulario-94d94.firebaseapp.com",
+            projectId: "formulario-94d94",
+            storageBucket: "formulario-94d94.firebasestorage.app",
+            messagingSenderId: "723989461612",
+            appId: "1:723989461612:web:1f0bb69233dd435af2b649"
+        };
+        firebase.initializeApp(FIREBASE_CONFIG);
+        const db = firebase.firestore();
+
         const CREDENTIALS = { user: 'admin', pass: 'admin' };
+        const COL_RESPUESTAS = 'respuestas';
+        const COL_CONFIG = 'configuracion';
+        const DOC_CONFIG = 'encuesta';
 
         let surveyConfig = {
             title: "Encuesta sobre el servicio de entrega de medicamentos a domicilio del IHSS – San Pedro Sula",
@@ -272,17 +291,17 @@
         function loadApp() {
             var isAdmin = window.location.hash.includes('admin');
             if (!isAdmin) document.getElementById('globalLoader').classList.remove('hidden-view');
-            fetch(SCRIPT_URL)
-                .then(r => r.json())
-                .then(json => {
-                    if (json.result === 'success') {
-                        if (json.config && json.config.questions) surveyConfig = json.config;
-                        surveyData = json.data || [];
-                        renderPatientView();
+            db.collection(COL_CONFIG).doc(DOC_CONFIG).get()
+                .then(function(doc) {
+                    if (doc.exists && doc.data().questions && doc.data().questions.length) {
+                        surveyConfig.title = doc.data().title || surveyConfig.title;
+                        surveyConfig.subtitle = doc.data().subtitle || surveyConfig.subtitle;
+                        surveyConfig.questions = doc.data().questions;
                     }
+                    renderPatientView();
                     document.getElementById('globalLoader').classList.add('hidden-view');
                 })
-                .catch(e => {
+                .catch(function() {
                     renderPatientView();
                     document.getElementById('globalLoader').classList.add('hidden-view');
                 });
@@ -387,33 +406,27 @@
 
         document.getElementById('surveyForm').addEventListener('submit', function(e) {
             e.preventDefault();
-            const form = this;
-            const btn = document.getElementById('btnSubmit');
-            const spinner = document.getElementById('spinner');
-            const iframe = document.getElementById('submitFrame');
+            var form = this;
+            var btn = document.getElementById('btnSubmit');
+            var spinner = document.getElementById('spinner');
             btn.disabled = true;
             spinner.classList.remove('hidden');
-            form.action = SCRIPT_URL;
-            form.method = 'post';
-            form.target = 'submitFrame';
-            var responded = false;
-            var submitted = false;
-            function onDone(success) {
-                if (responded) return;
-                responded = true;
-                btn.disabled = false;
-                spinner.classList.add('hidden');
-                if (success) {
+            var formData = new FormData(form);
+            var data = { fecha: new Date().toISOString() };
+            surveyConfig.questions.forEach(function(q) {
+                var val = formData.get(q.id);
+                data[q.id] = (val != null && String(val).trim() !== '') ? String(val).trim() : '';
+            });
+            db.collection(COL_RESPUESTAS).add(data)
+                .then(function() {
                     alert("¡Gracias! Sus respuestas se han enviado correctamente.");
                     window.location.reload();
-                } else {
-                    alert("Error de conexión. Por favor intente nuevamente.");
-                }
-            }
-            iframe.onload = function() { if (submitted) onDone(true); };
-            setTimeout(function() { onDone(false); }, 12000);
-            form.submit();
-            submitted = true;
+                })
+                .catch(function(err) {
+                    btn.disabled = false;
+                    spinner.classList.add('hidden');
+                    alert("Error al guardar: " + (err.message || "Por favor intente nuevamente."));
+                });
         });
 
         function renderEditor() {
@@ -456,35 +469,77 @@
         }
 
         function saveConfiguration() {
-            const btn = document.getElementById('btnSaveConfig');
+            var btn = document.getElementById('btnSaveConfig');
             btn.textContent = "Guardando...";
             btn.disabled = true;
             surveyConfig.title = document.getElementById('editTitle').value;
             surveyConfig.subtitle = document.getElementById('editDesc').value;
-            const formData = new FormData();
-            formData.append('action', 'save_config');
-            formData.append('configData', JSON.stringify(surveyConfig));
-            fetch(SCRIPT_URL, { method: 'POST', body: formData })
-                .then(r => r.json())
-                .then(json => { alert("Configuración guardada."); renderPatientView(); })
-                .finally(() => { btn.textContent = "GUARDAR CAMBIOS"; btn.disabled = false; });
+            db.collection(COL_CONFIG).doc(DOC_CONFIG).set({
+                title: surveyConfig.title,
+                subtitle: surveyConfig.subtitle,
+                questions: surveyConfig.questions
+            }).then(function() {
+                alert("Configuración guardada.");
+                renderPatientView();
+            }).catch(function(err) {
+                alert("Error: " + (err.message || "No se pudo guardar."));
+            }).finally(function() {
+                btn.textContent = "GUARDAR CAMBIOS";
+                btn.disabled = false;
+            });
         }
 
         function renderDashboard() {
-            document.getElementById('dashTotal').textContent = surveyData.length;
             document.getElementById('publicLink').value = window.location.origin + window.location.pathname + '#/pacientes';
-            const thead = document.getElementById('dashHeaders');
+            document.getElementById('dashTotal').textContent = '…';
+            var thead = document.getElementById('dashHeaders');
             thead.innerHTML = '<th class="p-4">Fecha</th>';
-            surveyConfig.questions.forEach(q => thead.innerHTML += `<th class="p-4 whitespace-nowrap">${q.label.substring(0,30)}…</th>`);
-            const tbody = document.getElementById('dashBody');
-            tbody.innerHTML = '';
-            surveyData.slice().reverse().slice(0, 50).forEach(row => {
-                let tr = '<tr class="hover:bg-teal-50 border-b border-teal-100">';
-                tr += `<td class="p-4 text-teal-600">${row.fecha ? new Date(row.fecha).toLocaleString('es-HN') : '-'}</td>`;
-                surveyConfig.questions.forEach(q => tr += `<td class="p-4">${row[q.id] || '-'}</td>`);
-                tr += '</tr>';
-                tbody.innerHTML += tr;
+            surveyConfig.questions.forEach(function(q) {
+                thead.innerHTML += '<th class="p-4 whitespace-nowrap">' + q.label.substring(0, 30) + '…</th>';
             });
+            var tbody = document.getElementById('dashBody');
+            tbody.innerHTML = '<tr><td colspan="' + (surveyConfig.questions.length + 1) + '" class="p-4 text-center text-teal-500">Cargando…</td></tr>';
+            db.collection(COL_RESPUESTAS).orderBy('fecha', 'desc').get()
+                .then(function(snapshot) {
+                    surveyData = [];
+                    snapshot.forEach(function(doc) {
+                        var d = doc.data();
+                        d.id = doc.id;
+                        surveyData.push(d);
+                    });
+                    document.getElementById('dashTotal').textContent = surveyData.length;
+                    tbody.innerHTML = '';
+                    surveyData.slice(0, 100).forEach(function(row) {
+                        var tr = '<tr class="hover:bg-teal-50 border-b border-teal-100">';
+                        tr += '<td class="p-4 text-teal-600">' + (row.fecha ? new Date(row.fecha).toLocaleString('es-HN') : '-') + '</td>';
+                        surveyConfig.questions.forEach(function(q) {
+                            tr += '<td class="p-4">' + (row[q.id] || '-') + '</td>';
+                        });
+                        tr += '</tr>';
+                        tbody.innerHTML += tr;
+                    });
+                })
+                .catch(function(err) {
+                    tbody.innerHTML = '<tr><td colspan="' + (surveyConfig.questions.length + 1) + '" class="p-4 text-center text-red-500">Error al cargar: ' + (err.message || '') + '</td></tr>';
+                    document.getElementById('dashTotal').textContent = '0';
+                });
+        }
+
+        function downloadExcel() {
+            var headers = ['Fecha'].concat(surveyConfig.questions.map(function(q) { return q.label; }));
+            var keys = ['fecha'].concat(surveyConfig.questions.map(function(q) { return q.id; }));
+            var aoa = [headers];
+            surveyData.forEach(function(row) {
+                var r = [row.fecha ? new Date(row.fecha).toLocaleString('es-HN') : ''];
+                keys.slice(1).forEach(function(k) { r.push(row[k] != null ? String(row[k]) : ''); });
+                aoa.push(r);
+            });
+            var wb = XLSX.utils.book_new();
+            var ws = XLSX.utils.aoa_to_sheet(aoa);
+            var maxW = 12;
+            ws['!cols'] = keys.map(function() { return { wch: maxW }; });
+            XLSX.utils.book_append_sheet(wb, ws, 'Respuestas');
+            XLSX.writeFile(wb, 'encuesta_ihss_respuestas_' + new Date().toISOString().slice(0, 10) + '.xlsx');
         }
 
         function attemptLogin() {
